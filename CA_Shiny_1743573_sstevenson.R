@@ -79,16 +79,28 @@ ui <- fluidPage(
         fileInput('file', 'Choose CSV File',
             accept=c('text/csv', 'text/comma-separated-values,text/plain', '.csv')
         ),
-        checkboxGroupInput(inputId = "FieldSelection", label = "Select Fields for Table Display")
-        
+        conditionalPanel(condition = "output.fileUploaded",
+                         radioButtons(inputId = "plottype", label = "Select Plot Type", choices = c("Scatterplot", "Correlogram", "Histogram"), selected = "")
+        ),
+
+        conditionalPanel(
+          condition = "input.plottype == 'Scatterplot'",
+          selectInput(inputId = "Numeric", label = "Select Numeric", choices = ""),
+          selectInput(inputId = "Categorical", label = "Select Categorical", choices = ""),
+          selectizeInput(inputId = "NumberSel", label = "Select 2 numbers", choices = ""),
+          actionButton(inputId = "runScatter", "Create Scatterplot"),
+          checkboxGroupInput(inputId = "FieldSelection", label = "Select Fields for Table Display")
+        )
       ),
     mainPanel(
       tabsetPanel(type = "tabs",
                   tabPanel('Table', tableOutput('contents')),
+                  tabPanel('GenPlot', plotOutput('generic')),
                   tabPanel('Plot', plotOutput('plot')),
                   tabPanel('Pie', plotOutput('pie')),
                   tabPanel('Scatterplot', plotOutput('scatterplot')),
-                  tabPanel('Correlogram', plotOutput('correlogram'))
+                  tabPanel('Correlogram', plotOutput('correlogram')),
+                  tabPanel('Str', textOutput('str'))
     )
   )
 ))
@@ -117,16 +129,28 @@ server <- shinyServer(function(input, output, session) {
     dataread()
   })
   
+  dataread_str <- eventReactive(dataread(), {
+      cbind(colnames(dataread()),(sapply(dataread(), class)))
+    }
+  )
+  
   observeEvent( dataread(), {
-      print(ncol(dataread()))
-      ## updateCheckboxGroupInput(session = session, inputId = "FieldSelection", choiceValues = c(1:ncol(dataread())),  choiceNames = colnames(dataread()), selected = c(1:ncol(dataread())))
       updateCheckboxGroupInput(session = session, inputId = "FieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
-      print(paste(input$FieldSelection, "FieldSelection1"))
+      updateSelectInput(session = session, inputId = "Numeric", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]))
+      updateSelectizeInput(session = session, inputId = "NumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 2, minItems = 2))
+      updateSelectInput(session = session, inputId = "Categorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
+      ###print(paste(input$FieldSelection, "FieldSelection1"))
   } )
   
+  scatterEvent <- eventReactive(input$runScatter, {
+    cbind(mydata()[,input$Categorical],mydata()[,input$NumberSel])
+  })
   
   observe( {
     print(paste(input$FieldSelection, "FieldSelection"))
+    print("----------------------------------------------------------")
+    print(dataread_str())
+    print("----------------------------------------------------------")
     print("")
   })
   
@@ -155,6 +179,25 @@ server <- shinyServer(function(input, output, session) {
     else
       create_correlogram(mydata()[c(6:8)], "Correlogram of Scores")
   )
+  
+  output$str <- renderText(
+    if (length(input$FieldSelection) == 0)
+      return(NULL)
+    else
+      dataread_str()[dataread_str()[,2] != "numeric", 1]
+    
+  )
+  
+  output$fileUploaded <- reactive({
+    return(!is.null(dataread()))
+  })
+  outputOptions(output, 'fileUploaded', suspendWhenHidden=FALSE)
+  
+  output$generic <- renderPlot(
+    ### pDataframe, pXvar, pyVar, pCategoricalVar, pMainTitle, pXTitle, pYtitle, pCaption
+    create_scatterplot_for_each_categorical_variable(scatterEvent(), scatterEvent()[,2], scatterEvent()[,3], scatterEvent()[,1], "X", "Y", "Z", "A")
+  )
+  
 })
 
 shinyApp(ui = ui, server = server)
