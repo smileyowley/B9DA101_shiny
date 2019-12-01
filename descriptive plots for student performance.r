@@ -6,7 +6,7 @@ library(magrittr)
 library(ggpubr)
 library(ggthemes)
 library(dplyr)
-
+library(plot3D)
 
 #Data source
 SourceLink = "https://www.kaggle.com/spscientist/students-performance-in-exams/download/StudentsPerformance.csv"
@@ -109,6 +109,37 @@ datafr %>%
   geom_text(aes(label=n),position = position_dodge(width=1), vjust=-.5)
 
 
+#correlation between each exam score
+
+l0<-scatter3D(x = datafr$math.score, y = datafr$reading.score, z =datafr$writing.score,  xlab = "Maths Marks", ylab = "Reading Marks", zlab = "Writing Marks", phi = 0, bty ="g", main = "Exam Marks of Students", ticktype = "detailed")        
+l0
+
+l1 <- ggplot(datafr, aes( reading.score,math.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+l1
+
+
+l2 <- ggplot(datafr, aes( writing.score,math.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+l2
+
+
+l3 <- ggplot(datafr, aes( writing.score,reading.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+l3
+
+grid.arrange(l1,l2,l3,ncol=2,nrow=2)
+
+
+#for fun
+l4 <- ggplot(datafr, aes( writing.score,reading.score)) +
+  geom_point(aes(colour=datafr$race.ethnicity)) +
+  stat_smooth(method = lm)
+l4<-l4+labs(colour = "Ethnicity")
+l4
 
 
 
