@@ -141,6 +141,14 @@ l4 <- ggplot(datafr, aes( writing.score,reading.score)) +
 l4<-l4+labs(colour = "Ethnicity")
 l4
 
+#normal distribution example
+
+
+p7 <- ggplot(datafr, aes(math.score))  + 
+  geom_histogram(aes(y = ..density..), binwidth = 5, colour = "black",fill='green') + 
+  stat_function(geom='point',fun = dnorm, args = list(mean = mean(datafr$math.score), sd = sd(datafr$math.score)),colour='red')
+p7<-p7 + xlab("Math Scores") + ylab("number of students") + ggtitle("Math Scores by Prep course")
+p7
 
 
 ### below to be reviewed
@@ -156,16 +164,7 @@ distribution<-dnorm(datafr$math.score,mean=mu,sd=sigma)
 #test
 ggplot(datafr, aes(Average.score)) + geom_density(aes(y=5 * ..count..))+ geom_histogram(binwidth=5, color="white", aes(fill=Prep.Course))+ xlab("Average Scores") + ylab("Prep.Course") + ggtitle("Average Scores by Prep course")
 
-?geom_density
-
-p_distribution
 
 
-p7 <- ggplot(datafr, aes(math.score))  + 
-  geom_histogram(aes(y = ..density..), binwidth = 5, colour = "black",fill='blue') + 
-  stat_function(fun = dnorm, args = list(mean = mean(datafr$math.score), sd = sd(datafr$math.score)),colour='red')
-p7<-p7 + xlab("Math Scores") + ylab("number of students") + ggtitle("Math Scores by Prep course")
-p7
 
 
-?stat_function
