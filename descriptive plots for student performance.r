@@ -4,6 +4,8 @@ library(GGally)
 library(gridExtra)
 library(magrittr)
 library(ggpubr)
+library(ggthemes)
+library(dplyr)
 
 
 #Data source
@@ -27,6 +29,7 @@ p1
 #reading score by gender
 p2=ggplot(datafr, aes(reading.score)) + geom_histogram(binwidth=5, color="white", aes(fill=gender))
 p2 <- p2 + xlab("Reading Scores") + ylab("Gender") + ggtitle("Reading Scores by Gender")
+p2
 
 #writing score by gender
 p3=ggplot(datafr, aes(writing.score)) + geom_histogram(binwidth=5, color="white", aes(fill=gender))
@@ -47,11 +50,9 @@ p4
 
 
 View(datafr)#check
-View(sum_score)#check
 
 #view multiple plots
 
-grid.arrange(p1,p2,ncol=2)
 grid.arrange(p1,p2,p3,p4,ncol=2,nrow=2)
 
 
@@ -83,8 +84,29 @@ boxplot_rep<-ggarrange(b, b1, b2,
 multi_boxplot<-annotate_figure(boxplot_rep, top = text_grob("Boxplot visualization", color = "red", face = "bold", size = 14))
 multi_boxplot
 
-grid.arrange(b,b1,b2,legend,ncol=3,nrow=2)
+#visualisation median total score by parental education and lunch
 
+datafr %>% 
+  mutate(total_score = math.score+reading.score+writing.score) %>% 
+  group_by(education = parental.level.of.education, lunch) %>% 
+  summarise(median_score = median(total_score)) %>% 
+  ggplot(aes(x = education, y = median_score, fill = lunch))+
+  geom_col(position='dodge',col='black')+
+  theme_hc()+
+  scale_fill_manual(values=ggthemes_data$hc$darkunica[c(4,2)])+
+  labs(x='',y='Median Total Score', fill = 'Lunch')+
+  geom_text(aes(label=median_score),position=position_dodge(width=1), vjust =-.5)
+
+#frequency of ethnicities by gender
+
+datafr %>% 
+  count(gender,race.ethnicity) %>% 
+  ggplot(aes(x=gender,y=n,fill=race.ethnicity))+
+  geom_bar(stat='identity',position='dodge', col='black')+
+  theme_hc()+
+  scale_fill_hc('darkunica')+
+  labs(x='',y='Number of students', fill='Race group')+
+  geom_text(aes(label=n),position = position_dodge(width=1), vjust=-.5)
 
 
 
