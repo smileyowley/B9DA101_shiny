@@ -1,4 +1,4 @@
-rm(list=ls())
+rm(list = ls())
 if(!require("shiny")) {install.packages("shiny")}
 if(!require("ggplot2")) install.packages("ggplot2")
 if(!require("ggcorrplot")) install.packages("ggcorrplot")
@@ -82,15 +82,28 @@ ui <- fluidPage(
         conditionalPanel(condition = "output.fileUploaded",
                          radioButtons(inputId = "plottype", label = "Select Plot Type", choices = c("Scatterplot", "Correlogram", "Histogram"), selected = "")
         ),
-
+        ### Selection Criteria for ScatterPlot
         conditionalPanel(
           condition = "input.plottype == 'Scatterplot'",
-          selectInput(inputId = "Numeric", label = "Select Numeric", choices = ""),
-          selectInput(inputId = "Categorical", label = "Select Categorical", choices = ""),
-          selectizeInput(inputId = "NumberSel", label = "Select 2 numbers", choices = ""),
-          actionButton(inputId = "runScatter", "Create Scatterplot"),
-          checkboxGroupInput(inputId = "FieldSelection", label = "Select Fields for Table Display")
-        )
+          ####selectInput(inputId = "scatterNumeric", label = "Select Numeric", choices = ""),
+          selectInput(inputId = "scatterCategorical", label = "Select Categorical", choices = ""),
+          selectizeInput(inputId = "scatterNumberSel", label = "Select 2 numbers", choices = ""),
+          actionButton(inputId = "runScatter", "Create Scatterplot")
+          
+        ),
+        conditionalPanel(
+          condition = "input.plottype == 'Correlogram'",
+          selectizeInput(inputId = "correlogramNumberSel", label = "Select numbers", choices = ""),
+          actionButton(inputId = "runCorrelogram", "Create Correlogram")
+        ),
+        
+        conditionalPanel(
+          condition = "input.plottype == 'Histogram'",
+          selectInput(inputId = "histogramCategorical", label = "Select Categorical", choices = ""),
+          actionButton(inputId = "runHistogram", "Create Histogram")
+        ),
+        
+        checkboxGroupInput(inputId = "tableFieldSelection", label = "Select Fields for Table Display")
       ),
     mainPanel(
       tabsetPanel(type = "tabs",
@@ -107,11 +120,9 @@ ui <- fluidPage(
 
 
 server <- shinyServer(function(input, output, session) {
-  ### dataread <- reactive( { read.csv(input$file1, header=input$header, sep=input$sep, quote=input$quote) } )
-  ### dataread <- eventReactive(input$file1, { read.csv(input$file1, header=input$header, sep=input$sep, quote=input$quote) } )
+
   
-  cols <- NULL
-  
+  ###  Load data   
   dataread <- eventReactive(input$file, {
     if ( is.null(input$file)) return(NULL)
     inFile <- input$file
@@ -120,45 +131,62 @@ server <- shinyServer(function(input, output, session) {
     read.csv(file, header=input$header, sep=input$sep, quote=input$quote)
   } )
   
+  ### Once data is loaded into dataread() load filterable data into mydata()
   mydata <- eventReactive(dataread(), {
     if (is.null(dataread()))
     {
       print("NULL mydata")
       return(NULL)
     }
+    print("mydata <- eventReactive(dataread()")
     dataread()
   })
   
+  ### Determine class of all fields for plotting etc.
   dataread_str <- eventReactive(dataread(), {
       cbind(colnames(dataread()),(sapply(dataread(), class)))
     }
   )
   
-  observeEvent( dataread(), {
-      updateCheckboxGroupInput(session = session, inputId = "FieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
-      updateSelectInput(session = session, inputId = "Numeric", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]))
-      updateSelectizeInput(session = session, inputId = "NumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 2, minItems = 2))
-      updateSelectInput(session = session, inputId = "Categorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
-      ###print(paste(input$FieldSelection, "FieldSelection1"))
+  ### Update all input fields when data
+  observeEvent( dataread_str(), {
+      updateCheckboxGroupInput(session = session, inputId = "scatterFieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
+      updateCheckboxGroupInput(session = session, inputId = "tableFieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
+      updateSelectInput(session = session, inputId = "scatterNumeric", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]))
+      updateSelectizeInput(session = session, inputId = "scatterNumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 2, minItems = 2))
+      updateSelectInput(session = session, inputId = "scatterCategorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
+      updateSelectInput(session = session, inputId = "histogramCategorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
+      updateSelectizeInput(session = session, inputId = "correlogramNumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 99, minItems = 2))
+      print(paste(input$scatterFieldSelection, "scatterFieldSelection1"))
   } )
   
   scatterEvent <- eventReactive(input$runScatter, {
-    cbind(mydata()[,input$Categorical],mydata()[,input$NumberSel])
+    cbind(dataread()[,input$scatterCategorical],dataread()[,input$scatterNumberSel])
   })
   
-  observe( {
-    print(paste(input$FieldSelection, "FieldSelection"))
-    print("----------------------------------------------------------")
-    print(dataread_str())
-    print("----------------------------------------------------------")
-    print("")
+  histogramEvent <- eventReactive(input$runHistogram, {
+    dataread()
   })
+  
+  correlogramEvent <- eventReactive(input$runCorrelogram, {
+    dataread()[,input$correlogramNumberSel]
+  })
+  
+  # observe( {
+  #   print(paste(input$scatterFieldSelection, "scatterFieldSelection"))
+  #   print(paste(input$correlogram, "correlogramFieldSelection"))
+  #   print("----------------------------------------------------------")
+  #   print(dataread_str())
+  #   print(correlogramEvent())
+  #   print("----------------------------------------------------------")
+  #   print("")
+  # })
   
   output$contents <- renderTable(
-    if (length(input$FieldSelection) == 0)
+    if (length(input$tableFieldSelection) == 0)
         return(NULL)
     else
-        mydata()[,input$FieldSelection]
+        mydata()[,input$tableFieldSelection]
   )
   
   output$plot <- renderPlot(
@@ -174,14 +202,14 @@ server <- shinyServer(function(input, output, session) {
   )
   
   output$correlogram <- renderPlot(
-    if (length(input$FieldSelection) == 0)
+    if (length(input$scatterFieldSelection) == 0)
       return(NULL)
     else
       create_correlogram(mydata()[c(6:8)], "Correlogram of Scores")
   )
   
   output$str <- renderText(
-    if (length(input$FieldSelection) == 0)
+    if (length(input$scatterFieldSelection) == 0)
       return(NULL)
     else
       dataread_str()[dataread_str()[,2] != "numeric", 1]
@@ -191,11 +219,23 @@ server <- shinyServer(function(input, output, session) {
   output$fileUploaded <- reactive({
     return(!is.null(dataread()))
   })
-  outputOptions(output, 'fileUploaded', suspendWhenHidden=FALSE)
+  outputOptions(output, 'fileUploaded', suspendWhenHidden = FALSE)
   
   output$generic <- renderPlot(
     ### pDataframe, pXvar, pyVar, pCategoricalVar, pMainTitle, pXTitle, pYtitle, pCaption
-    create_scatterplot_for_each_categorical_variable(scatterEvent(), scatterEvent()[,2], scatterEvent()[,3], scatterEvent()[,1], "X", "Y", "Z", "A")
+    if (input$plottype == "Scatterplot")
+    {
+      create_scatterplot_for_each_categorical_variable(scatterEvent(), scatterEvent()[,2], scatterEvent()[,3], scatterEvent()[,1], "X", "Y", "Z", "A")
+    }
+    else if (input$plottype == "Correlogram")
+    {
+      create_correlogram(correlogramEvent(), "Correlogram of Scores")
+    }
+    else if (input$plottype == "Histogram")
+    {
+      create_count_histogram_With_Gradient_filling(histogramEvent(), histogramEvent()[,input$histogramCategorical], "Parental Education Histogram", colnames(histogramEvent()[,input$histogramCategorical]), "Count")
+    }
+    else NULL
   )
   
 })
