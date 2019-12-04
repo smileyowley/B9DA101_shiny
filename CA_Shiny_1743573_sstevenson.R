@@ -2,9 +2,11 @@ rm(list = ls())
 if(!require("shiny")) {install.packages("shiny")}
 if(!require("ggplot2")) install.packages("ggplot2")
 if(!require("ggcorrplot")) install.packages("ggcorrplot")
+if(!require("RODBC")) {install.packages("RODBC")}
 library(ggplot2)
 library(ggcorrplot)
 library(shiny)
+library(RODBC)
 
 create_count_histogram_With_Gradient_filling <- function(pDataframe, pCategoricalVar, pMainTitle, pXtitle, pYtitle)
 {
@@ -12,21 +14,21 @@ create_count_histogram_With_Gradient_filling <- function(pDataframe, pCategorica
   ggplot(data=pDataframe, aes(x = pCategoricalVar)) +
     geom_bar(
       col="red",
-      aes(fill=..count..),                                            ###  Shades bars according to count
+      aes(fill = ..count..),                                            ###  Shades bars according to count
       alpha = .5                                                      ###  transparency of bars 0 (fully transparent) -> 1 (fully opaque)
     ) +
     scale_fill_gradient("Count", low="green", high = "red") +         ###  alternative fill setting colours according to count
     labs(title = pMainTitle, x = pXtitle, y = pYtitle)
 }
 
-create_pie_chart <- function(pDataframe, pCategoricalVar, pMainTitle, pCaption)
+create_pie_chart <- function(pDataframe, pCategoricalVar, pMainTitle, pCaption, pLabel)
 {
   ### Build a pie chart
   pie <- ggplot(pDataframe, aes(x = "", fill = pCategoricalVar)) + 
     geom_bar(width = 1) +
     theme(axis.line = element_blank(), 
           plot.title = element_text(hjust=0.5)) + 
-    labs(fill="weight", 
+    labs(fill = pLabel, 
          x=NULL, 
          y=NULL, 
          title=pMainTitle, 
@@ -58,7 +60,7 @@ create_correlogram  <- function(pContinuousVar, pTitle)
 }
 
 ui <- fluidPage(
-    titlePanel('input$file'),
+    titlePanel("File Load"),
     sidebarLayout(
       
       # Sidebar panel for inputs ----
@@ -67,53 +69,62 @@ ui <- fluidPage(
         # Input: Slider for the number of bins ----
         
         tags$hr(),
-        checkboxInput('header', 'Header', TRUE),
-        radioButtons(inputId = 'sep', label = 'Separator',
-                     choices = c(Comma=',',
-                       Semicolon=';',
-                       Tab='\t')),
-        radioButtons('quote', 'Quote',
-                     c(None='',
-                       'Double Quote'='"',
-                       'Single Quote'="'")),
-        fileInput('file', 'Choose CSV File',
-            accept=c('text/csv', 'text/comma-separated-values,text/plain', '.csv')
+        ###
+        ###
+        ###   File load
+        ###
+        
+        selectInput(inputId = "dataMethod", label = "Select Method of entering data", choices = c("csv File", "SQL"), selected = ""),
+        conditionalPanel(
+          condition = "input.dataMethod == 'csv File'",
+          checkboxInput('header', 'Header', TRUE),
+          radioButtons(inputId = 'sep', label = 'Separator', choices = c(Comma = ',',  Semicolon = ';', Tab = '\t')),
+          radioButtons('quote', 'Quote', c(None = '', 'Double Quote' = '"', 'Single Quote' = "'")),
+          fileInput('file', 'Choose CSV File', accept = c('text/csv', 'text/comma-separated-values,text/plain', '.csv'))
+        ),
+        conditionalPanel(
+          condition = "input.dataMethod == 'SQL'",
+          textInput(inputId = "SQL", label = "Enter SQL")
+        ),
+        conditionalPanel(
+          condition = "input.dataMethod == 'csv File' || input.dataMethod == 'SQL'",
+          actionButton(inputId = "btnLoadData", label = "Load Data")
         ),
         conditionalPanel(condition = "output.fileUploaded",
-                         radioButtons(inputId = "plottype", label = "Select Plot Type", choices = c("Scatterplot", "Correlogram", "Histogram"), selected = "")
+            radioButtons(inputId = "plottype", label = "Select Plot Type", choices = c("Scatterplot", "Correlogram", "Histogram", "Pie"), selected = "")
         ),
-        ### Selection Criteria for ScatterPlot
+        conditionalPanel(
+          condition = "input.plottype == 'Pie' || input.plottype == 'Scatterplot' || input.plottype == 'Histogram'",
+          selectizeInput(inputId = "genAll", label = "Select Categorical", choices = "")
+        ),
+        conditionalPanel(
+          condition = "input.plottype == 'Scatterplot' || input.plottype == 'Correlogram'",
+          selectizeInput(inputId = "genNumber", label = "Select Categorical", choices = "")
+        ),
         conditionalPanel(
           condition = "input.plottype == 'Scatterplot'",
-          ####selectInput(inputId = "scatterNumeric", label = "Select Numeric", choices = ""),
-          selectInput(inputId = "scatterCategorical", label = "Select Categorical", choices = ""),
-          selectizeInput(inputId = "scatterNumberSel", label = "Select 2 numbers", choices = ""),
-          actionButton(inputId = "runScatter", "Create Scatterplot")
-          
+          actionButton(inputId = "runScatter", label = "Run Scatterplot")
+        ),
+        conditionalPanel(
+          condition = "input.plottype == 'Histogram'",
+          actionButton(inputId = "runHistogram", label = "Run Histogram")
         ),
         conditionalPanel(
           condition = "input.plottype == 'Correlogram'",
-          selectizeInput(inputId = "correlogramNumberSel", label = "Select numbers", choices = ""),
-          actionButton(inputId = "runCorrelogram", "Create Correlogram")
+          actionButton(inputId = "runCorrelogram", label = "Run Corrolegram")
         ),
-        
         conditionalPanel(
-          condition = "input.plottype == 'Histogram'",
-          selectInput(inputId = "histogramCategorical", label = "Select Categorical", choices = ""),
-          actionButton(inputId = "runHistogram", "Create Histogram")
+          condition = "input.plottype == 'Pie'",
+          actionButton(inputId = "runPie", label = "Run Pie Chart")
         ),
-        
-        checkboxGroupInput(inputId = "tableFieldSelection", label = "Select Fields for Table Display")
+        ### Selection Criteria for ScatterPlot
+        selectizeInput(inputId = "tableFieldSelection", label = "Select Fields for Table Display", choices = "")
       ),
     mainPanel(
       tabsetPanel(type = "tabs",
                   tabPanel('Table', tableOutput('contents')),
                   tabPanel('GenPlot', plotOutput('generic')),
-                  tabPanel('Plot', plotOutput('plot')),
-                  tabPanel('Pie', plotOutput('pie')),
-                  tabPanel('Scatterplot', plotOutput('scatterplot')),
-                  tabPanel('Correlogram', plotOutput('correlogram')),
-                  tabPanel('Str', textOutput('str'))
+                  tabPanel('Diagnostics', tableOutput('diagnostics'))
     )
   )
 ))
@@ -122,17 +133,34 @@ ui <- fluidPage(
 server <- shinyServer(function(input, output, session) {
 
   
-  ###  Load data   
-  dataread <- eventReactive(input$file, {
-    if ( is.null(input$file)) return(NULL)
-    inFile <- input$file
-    file <- inFile$datapath
-    print(paste("File = ", file))
-    read.csv(file, header=input$header, sep=input$sep, quote=input$quote)
+  ###  Load data
+  dataread <- eventReactive(input$btnLoadData, {
+    print("dataread <- eventReactive(input$btnLoadData")
+    if (input$dataMethod == "csv File")
+      {
+        if ( is.null(input$file)) return(NULL)
+        inFile <- input$file
+        file <- inFile$datapath
+        print(paste("File = ", file))
+        read.csv(file, header = input$header, sep = input$sep, quote = input$quote)
+      }
+    else
+      {
+        myConn <- odbcConnect("TeraDW")
+        x <- sqlQuery(myConn, input$SQL)
+        odbcClose(myConn)
+        x
+      }
+  } )
+  
+  pCaption <- eventReactive(input$btnLoadData, {
+    if (input$dataMethod == "csv File") input$file$name
+    else input$SQL
   } )
   
   ### Once data is loaded into dataread() load filterable data into mydata()
-  mydata <- eventReactive(dataread(), {
+  mydata <- eventReactive(input$tableFieldSelection, {
+    print("mydata <- eventReactive(input$tableFieldSelection")
     if (is.null(dataread()))
     {
       print("NULL mydata")
@@ -144,24 +172,46 @@ server <- shinyServer(function(input, output, session) {
   
   ### Determine class of all fields for plotting etc.
   dataread_str <- eventReactive(dataread(), {
+      print("dataread_str <- eventReactive(dataread()")
+      print(input$file$name)
       cbind(colnames(dataread()),(sapply(dataread(), class)))
     }
   )
   
-  ### Update all input fields when data
+  ### Update all input fields for selection in table rendering
   observeEvent( dataread_str(), {
-      updateCheckboxGroupInput(session = session, inputId = "scatterFieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
-      updateCheckboxGroupInput(session = session, inputId = "tableFieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()))
-      updateSelectInput(session = session, inputId = "scatterNumeric", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]))
-      updateSelectizeInput(session = session, inputId = "scatterNumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 2, minItems = 2))
-      updateSelectInput(session = session, inputId = "scatterCategorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
-      updateSelectInput(session = session, inputId = "histogramCategorical", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]))
-      updateSelectizeInput(session = session, inputId = "correlogramNumberSel", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 99, minItems = 2))
-      print(paste(input$scatterFieldSelection, "scatterFieldSelection1"))
+      print("observeEvent( dataread_str()")  
+      updateRadioButtons(session = session, inputId = "plottype", choices = c("Scatterplot", "Correlogram", "Histogram", "Pie"), selected = "")
+      updateSelectizeInput(session = session, inputId = "tableFieldSelection",  choices = colnames(dataread()), selected = colnames(dataread()), options = list(maxItems = 999, minItems = 1))
+      updateSelectizeInput(session = session, inputId = "genAll", label = "Category", choices = "")
+      updateSelectizeInput(session = session, inputId = "genNumber", label = "Numbers", choices = "")
   } )
   
+  ###  After selecting plot type setup selection criteria
+  observeEvent(input$plottype, {
+    print(paste("Plot selected : ", input$plottype))
+    if (input$plottype == "Scatterplot")
+    {
+      updateSelectizeInput(session = session, inputId = "genAll", label = "Scatterplot Category", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]), options = list(maxItems = 1, minItems = 1))
+      updateSelectizeInput(session = session, inputId = "genNumber", label = "Scatterplot XVar & YVar", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 2, minItems = 2))
+    }
+    else if (input$plottype == "Histogram")
+    {
+      updateSelectizeInput(session = session, inputId = "genAll",label = "Histogram Variable", choices = (dataread_str()[,1]), options = list(maxItems = 1, minItems = 1))
+    }
+    else if (input$plottype == "Correlogram")
+    {
+      updateSelectizeInput(session = session, inputId = "genNumber", label = "Correlogram Variables", choices = (dataread_str()[dataread_str()[,2] != "factor", 1]), options = list(maxItems = 9999, minItems = 1))
+    }
+    else if (input$plottype == "Pie")
+    {
+      updateSelectizeInput(session = session, inputId = "genAll", label = "Pie Category", choices = (dataread_str()[dataread_str()[,2] == "factor", 1]), options = list(maxItems = 1, minItems = 1))
+    }
+  } )
+  
+  ### Gather data for each plot event
   scatterEvent <- eventReactive(input$runScatter, {
-    cbind(dataread()[,input$scatterCategorical],dataread()[,input$scatterNumberSel])
+    cbind(dataread()[,input$genAll],dataread()[,input$genNumber])
   })
   
   histogramEvent <- eventReactive(input$runHistogram, {
@@ -169,51 +219,16 @@ server <- shinyServer(function(input, output, session) {
   })
   
   correlogramEvent <- eventReactive(input$runCorrelogram, {
-    dataread()[,input$correlogramNumberSel]
+    na.omit(dataread()[,input$genNumber])
   })
   
-  # observe( {
-  #   print(paste(input$scatterFieldSelection, "scatterFieldSelection"))
-  #   print(paste(input$correlogram, "correlogramFieldSelection"))
-  #   print("----------------------------------------------------------")
-  #   print(dataread_str())
-  #   print(correlogramEvent())
-  #   print("----------------------------------------------------------")
-  #   print("")
-  # })
+  pieEvent <- eventReactive(input$runPie, {
+    dataread()
+  })
   
-  output$contents <- renderTable(
-    if (length(input$tableFieldSelection) == 0)
-        return(NULL)
-    else
-        mydata()[,input$tableFieldSelection]
-  )
-  
-  output$plot <- renderPlot(
-    create_count_histogram_With_Gradient_filling(mydata(), mydata()$parental.level.of.education, "Parental Education Histogram", "XXXX", "Count")
-  )
 
-  output$pie <- renderPlot(
-    create_pie_chart(mydata(), as.factor(mydata()$race.ethnicity), "Pie Chart of Ethnicity", "Source: StudentPerformance.csv")
-  )
-  
-  output$scatterplot <- renderPlot(
-    create_scatterplot_for_each_categorical_variable(mydata(), mydata()$math.score, mydata()$reading.score, as.factor(mydata()$parental.level.of.education), "Student Performance", "Maths Score", "Reading Score", "SourceLink")
-  )
-  
-  output$correlogram <- renderPlot(
-    if (length(input$scatterFieldSelection) == 0)
-      return(NULL)
-    else
-      create_correlogram(mydata()[c(6:8)], "Correlogram of Scores")
-  )
-  
-  output$str <- renderText(
-    if (length(input$scatterFieldSelection) == 0)
-      return(NULL)
-    else
-      dataread_str()[dataread_str()[,2] != "numeric", 1]
-    
+  output$diagnostics <- renderTable(
+    dataread_str()
   )
   
   output$fileUploaded <- reactive({
@@ -221,11 +236,23 @@ server <- shinyServer(function(input, output, session) {
   })
   outputOptions(output, 'fileUploaded', suspendWhenHidden = FALSE)
   
+  output$contents <- renderTable(
+    if (length(input$tableFieldSelection) == 0)
+      return(NULL)
+    else
+      mydata()[,input$tableFieldSelection]
+  )
+  
   output$generic <- renderPlot(
+    
     ### pDataframe, pXvar, pyVar, pCategoricalVar, pMainTitle, pXTitle, pYtitle, pCaption
-    if (input$plottype == "Scatterplot")
+    if (is.null(input$plottype))
     {
-      create_scatterplot_for_each_categorical_variable(scatterEvent(), scatterEvent()[,2], scatterEvent()[,3], scatterEvent()[,1], "X", "Y", "Z", "A")
+      NULL
+    }
+    else if (input$plottype == "Scatterplot")
+    {
+      create_scatterplot_for_each_categorical_variable(scatterEvent(), scatterEvent()[,2], scatterEvent()[,3], scatterEvent()[,1], paste('Scatterplot by', input$genAll), input$genNumber[1], input$genNumber[2], pCaption())
     }
     else if (input$plottype == "Correlogram")
     {
@@ -233,7 +260,11 @@ server <- shinyServer(function(input, output, session) {
     }
     else if (input$plottype == "Histogram")
     {
-      create_count_histogram_With_Gradient_filling(histogramEvent(), histogramEvent()[,input$histogramCategorical], "Parental Education Histogram", colnames(histogramEvent()[,input$histogramCategorical]), "Count")
+      create_count_histogram_With_Gradient_filling(histogramEvent(), histogramEvent()[,input$genAll], input$genAll, colnames(histogramEvent()[,input$genAll]), "Count")
+    }
+    else if (input$plottype == "Pie")
+    {
+      create_pie_chart(pieEvent(), pieEvent()[,input$genAll], input$genAll, pCaption(), input$genAll)
     }
     else NULL
   )
