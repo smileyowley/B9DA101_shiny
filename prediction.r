@@ -40,6 +40,9 @@ lmPred <- predict(model,testData,interval = "prediction", level=0.95)
 summary(lmPred)
 head(lmPred)
 
+rmse_lm = sqrt(sum((lmPred -testData$writing.score)^2)/(nrow(testData)))
+rmse_lm
+
 # 1. Add predictions 
 mydata1 <- cbind(testData, lmPred)
 head(mydata1)
